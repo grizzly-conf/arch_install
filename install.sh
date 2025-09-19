@@ -8,15 +8,16 @@ set -euo pipefail
 # ⚠️ CONFIGURATION
 ##########################
 
-# !!! ERSETZE NACH BEDARF !!!
 ROOT_DISK="/dev/nvme0n1"
 HOME_DISK="/dev/nvme1n1"
 EFI_SIZE="512MiB"
-USERNAME="gamer"
-HOSTNAME="arch-gaming"
+USERNAME="seb"
+HOSTNAME="archhome"
 TIMEZONE="Europe/Berlin"
-LOCALE="en_US.UTF-8"
 LANG="en_US.UTF-8"
+LOCALE="en_US.UTF-8"
+KEYMAP="de-latin1"        # Tastaturlayout
+SWAP_SIZE="8G"            # Größe des Swapfiles
 
 ##########################
 # 1️⃣ PARTITIONIERUNG
@@ -55,7 +56,7 @@ mount "${HOME_DISK}p1" /mnt/home
 ##########################
 # 3️⃣ BASIS-SYSTEM INSTALLIEREN
 ##########################
-pacstrap /mnt base linux linux-firmware vim nano
+pacstrap /mnt base linux linux-firmware vim
 
 genfstab -U /mnt >> /mnt/etc/fstab
 
@@ -73,6 +74,9 @@ echo "$LOCALE UTF-8" >> /etc/locale.gen
 locale-gen
 echo "LANG=$LANG" > /etc/locale.conf
 
+# Tastaturlayout
+localectl set-keymap $KEYMAP
+
 # Hostname
 echo "$HOSTNAME" > /etc/hostname
 cat <<HOSTS > /etc/hosts
@@ -88,18 +92,17 @@ echo "root:archlinux" | chpasswd
 useradd -m -G wheel -s /bin/bash $USERNAME
 echo "$USERNAME:archlinux" | chpasswd
 
-# Sudo erlauben
+# Sudo Gruppe erstellen und Benutzer hinzufügen
+groupadd sudo
+usermod -aG sudo $USERNAME
 pacman -S --noconfirm sudo
-sed -i 's/^# %wheel ALL=(ALL) ALL/%wheel ALL=(ALL) ALL/' /etc/sudoers
+echo "%sudo ALL=(ALL) ALL" > /etc/sudoers.d/sudo-group
+chmod 440 /etc/sudoers.d/sudo-group
 
-# systemd-boot
+# systemd-boot installieren
 bootctl --path=/boot install
-cat <<LOADER > /boot/loader/loader.conf
-default arch
-timeout 3
-editor 0
-LOADER
 
+# Haupt-Entry
 UUID_ROOT=\$(blkid -s UUID -o value ${ROOT_DISK}p2)
 cat <<ARCH > /boot/loader/entries/arch.conf
 title   Arch Linux
@@ -107,6 +110,14 @@ linux   /vmlinuz-linux
 initrd  /initramfs-linux.img
 options root=UUID=\$UUID_ROOT rw
 ARCH
+
+# Fallback-Entry
+cat <<FALLBACK > /boot/loader/entries/arch-fallback.conf
+title   Arch Linux Fallback
+linux   /vmlinuz-linux
+initrd  /initramfs-linux-fallback.img
+options root=UUID=\$UUID_ROOT rw
+FALLBACK
 
 EOF
 
@@ -124,6 +135,21 @@ pacman -S --noconfirm nvidia nvidia-utils lib32-nvidia-utils vulkan-icd-loader l
 
 # Gaming Tools
 pacman -S --noconfirm steam steam-native-runtime lutris mangohud vulkan-tools
+
+EOF
+
+##########################
+# 6️⃣ SWAPFILE ERSTELLEN
+##########################
+arch-chroot /mnt /bin/bash <<EOF
+
+fallocate -l $SWAP_SIZE /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+
+# Persistente Eintragung in fstab
+echo "/swapfile none swap defaults 0 0" >> /etc/fstab
 
 EOF
 
