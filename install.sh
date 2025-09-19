@@ -56,6 +56,11 @@ mount "${HOME_DISK}p1" /mnt/home
 ##########################
 # 3️⃣ BASIS-SYSTEM INSTALLIEREN
 ##########################
+# Keyring initialisieren in Live-Umgebung
+pacman-key --init
+pacman-key --populate archlinux
+pacman -Sy --noconfirm
+
 pacstrap /mnt base linux linux-firmware vim
 
 genfstab -U /mnt >> /mnt/etc/fstab
@@ -64,6 +69,10 @@ genfstab -U /mnt >> /mnt/etc/fstab
 # 4️⃣ SYSTEM KONFIGURATION
 ##########################
 arch-chroot /mnt /bin/bash <<EOF
+# Keyring initialisieren innerhalb chroot
+pacman-key --init
+pacman-key --populate archlinux
+pacman -Sy --noconfirm
 
 # Zeitzone
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
