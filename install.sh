@@ -14,10 +14,9 @@ EFI_SIZE="512MiB"
 USERNAME="seb"
 HOSTNAME="archhome"
 TIMEZONE="Europe/Berlin"
-LANG="en_US.UTF-8"
-LOCALE="en_US.UTF-8"
+LANG="en_US.UTF-8"        # Systemsprache
 KEYMAP="de-latin1"        # Tastaturlayout
-SWAP_SIZE="8G"            # Größe des Swapfiles
+SWAP_SIZE="8G"            # Swapfile
 
 ##########################
 # 1️⃣ PARTITIONIERUNG
@@ -61,12 +60,13 @@ pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm
 
-pacstrap /mnt base linux linux-firmware vim
+# Basis installieren
+pacstrap /mnt base linux linux-firmware vim efibootmgr
 
 genfstab -U /mnt >> /mnt/etc/fstab
 
 ##########################
-# 4️⃣ SYSTEM KONFIGURATION
+# 4️⃣ SYSTEM KONFIGURATION (CHROOT)
 ##########################
 arch-chroot /mnt /bin/bash <<EOF
 # Keyring initialisieren innerhalb chroot
@@ -74,17 +74,18 @@ pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm
 
-# Zeitzone
+# Zeitzone setzen
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
-hwclock --systohc
+
+# Hardware-Uhr auf UTC setzen und Systemzeit synchronisieren
+hwclock --systohc --utc
+timedatectl set-ntp true
 
 # Locale
-echo "$LOCALE UTF-8" >> /etc/locale.gen
-locale-gen
 echo "LANG=$LANG" > /etc/locale.conf
 
-# Tastaturlayout
-localectl set-keymap $KEYMAP
+# Keymap ohne localectl
+echo "KEYMAP=$KEYMAP" > /etc/vconsole.conf
 
 # Hostname
 echo "$HOSTNAME" > /etc/hostname
@@ -102,17 +103,21 @@ useradd -m -G wheel -s /bin/bash $USERNAME
 echo "$USERNAME:archlinux" | chpasswd
 
 # Sudo Gruppe erstellen und Benutzer hinzufügen
+pacman -S --noconfirm sudo
 groupadd sudo
 usermod -aG sudo $USERNAME
-pacman -S --noconfirm sudo
 echo "%sudo ALL=(ALL) ALL" > /etc/sudoers.d/sudo-group
 chmod 440 /etc/sudoers.d/sudo-group
 
 # systemd-boot installieren
 bootctl --path=/boot install
 
-# Haupt-Entry
+# Initramfs erstellen
+mkinitcpio -P
+
+# Bootloader Einträge mit korrekter UUID
 UUID_ROOT=\$(blkid -s UUID -o value ${ROOT_DISK}p2)
+
 cat <<ARCH > /boot/loader/entries/arch.conf
 title   Arch Linux
 linux   /vmlinuz-linux
@@ -120,13 +125,15 @@ initrd  /initramfs-linux.img
 options root=UUID=\$UUID_ROOT rw
 ARCH
 
-# Fallback-Entry
 cat <<FALLBACK > /boot/loader/entries/arch-fallback.conf
 title   Arch Linux Fallback
 linux   /vmlinuz-linux
 initrd  /initramfs-linux-fallback.img
 options root=UUID=\$UUID_ROOT rw
 FALLBACK
+
+# EFI NVRAM Eintrag erstellen
+efibootmgr -c -d $ROOT_DISK -p 1 -L "Arch Linux" -l '\EFI\systemd\systemd-bootx64.efi'
 
 EOF
 
