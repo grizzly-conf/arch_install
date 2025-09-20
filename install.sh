@@ -22,12 +22,15 @@ SWAP_SIZE="8G"            # Swapfile
 # 1️⃣ PARTITIONIERUNG
 ##########################
 
-echo "!!! ACHTUNG: ALLE DATEN WERDEN GELÖSCHT !!!"
+echo "!!! ⚠️ ACHTUNG: ALLE DATEN AUF $ROOT_DISK UND $HOME_DISK WERDEN GELÖSCHT !!!"
 read -p "Willst du fortfahren? (yes/no): " confirm
 if [ "$confirm" != "yes" ]; then
     echo "Abgebrochen"
     exit 1
 fi
+
+echo "⚠️ Partitionierung startet in 5 Sekunden..."
+sleep 5
 
 # ROOT Disk
 parted $ROOT_DISK --script mklabel gpt
@@ -41,8 +44,8 @@ parted $HOME_DISK --script mkpart primary ext4 1MiB 100%
 
 # Filesystem
 mkfs.fat -F32 "${ROOT_DISK}p1"
-mkfs.ext4 "${ROOT_DISK}p2"
-mkfs.ext4 "${HOME_DISK}p1"
+mkfs.ext4 -F "${ROOT_DISK}p2"
+mkfs.ext4 -F "${HOME_DISK}p1"
 
 ##########################
 # 2️⃣ MOUNTEN
@@ -61,7 +64,7 @@ pacman-key --populate archlinux
 pacman -Sy --noconfirm
 
 # Basis installieren
-pacstrap /mnt base linux linux-firmware vim efibootmgr
+pacstrap /mnt base linux linux-firmware vim efibootmgr sudo
 
 genfstab -U /mnt >> /mnt/etc/fstab
 
@@ -77,14 +80,18 @@ pacman -Sy --noconfirm
 # Zeitzone setzen
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
 
-# Hardware-Uhr auf UTC setzen und Systemzeit synchronisieren
+# Hardware-Uhr auf UTC setzen
 hwclock --systohc --utc
-timedatectl set-ntp true
 
-# Locale
+# NTP vorbereiten (wirkt erst nach Reboot mit systemd-timesyncd)
+timedatectl set-ntp true || true
+
+# Locale konfigurieren
 echo "LANG=$LANG" > /etc/locale.conf
+sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen
 
-# Keymap ohne localectl
+# Keymap
 echo "KEYMAP=$KEYMAP" > /etc/vconsole.conf
 
 # Hostname
@@ -98,16 +105,13 @@ HOSTS
 # Root-Passwort
 echo "root:archlinux" | chpasswd
 
-# Standarduser
+# Standarduser mit wheel-Gruppe
 useradd -m -G wheel -s /bin/bash $USERNAME
 echo "$USERNAME:archlinux" | chpasswd
 
-# Sudo Gruppe erstellen und Benutzer hinzufügen
-pacman -S --noconfirm sudo
-groupadd sudo
-usermod -aG sudo $USERNAME
-echo "%sudo ALL=(ALL) ALL" > /etc/sudoers.d/sudo-group
-chmod 440 /etc/sudoers.d/sudo-group
+# Sudo-Rechte für wheel
+echo "%wheel ALL=(ALL) ALL" > /etc/sudoers.d/wheel
+chmod 440 /etc/sudoers.d/wheel
 
 # systemd-boot installieren
 bootctl --path=/boot install
@@ -132,8 +136,8 @@ initrd  /initramfs-linux-fallback.img
 options root=UUID=\$UUID_ROOT rw
 FALLBACK
 
-# EFI NVRAM Eintrag erstellen
-efibootmgr -c -d $ROOT_DISK -p 1 -L "Arch Linux" -l '\EFI\systemd\systemd-bootx64.efi'
+# EFI NVRAM Eintrag (falls bootctl nicht automatisch eingetragen hat)
+efibootmgr -c -d $ROOT_DISK -p 1 -L "Arch Linux" -l '\EFI\systemd\systemd-bootx64.efi' || true
 
 EOF
 
@@ -165,8 +169,8 @@ mkswap /swapfile
 swapon /swapfile
 
 # Persistente Eintragung in fstab
-echo "/swapfile none swap defaults 0 0" >> /etc/fstab
+echo "/swapfile none swap defaults 0 0" | tee -a /etc/fstab
 
 EOF
 
-echo "🎉 Installation abgeschlossen! Bitte chroot verlassen und neu booten."
+echo "🎉 Installation abgeschlossen! Bitte neu booten."
