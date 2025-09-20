@@ -166,6 +166,16 @@ pacman -Sy --noconfirm
 # NVIDIA & Vulkan
 pacman -S --noconfirm linux-headers nvidia-dkms nvidia-utils lib32-nvidia-utils vulkan-icd-loader lib32-vulkan-icd-loader
 
+# NVIDIA DRM Modeset aktivieren
+echo "options nvidia_drm modeset=1" > /etc/modprobe.d/nvidia.conf
+
+# mkinitcpio.conf anpassen
+sed -i 's/^MODULES=.*/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
+sed -i 's/^HOOKS=.*/HOOKS=(base udev autodetect modconf kms keyboard keymap consolefont block filesystems fsck)/' /etc/mkinitcpio.conf
+
+# Initramfs rebuild
+mkinitcpio -P
+
 # Gaming Tools
 pacman -S --noconfirm steam steam-native-runtime lutris mangohud vulkan-tools
 
