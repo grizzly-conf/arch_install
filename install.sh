@@ -164,7 +164,7 @@ sed -i '/#\\[multilib\\]/,/#Include/ s/^#//' /etc/pacman.conf
 pacman -Sy --noconfirm
 
 # NVIDIA & Vulkan
-pacman -S --noconfirm nvidia nvidia-utils lib32-nvidia-utils vulkan-icd-loader lib32-vulkan-icd-loader
+pacman -S --noconfirm linux-headers nvidia-dkms nvidia-utils lib32-nvidia-utils vulkan-icd-loader lib32-vulkan-icd-loader
 
 # Gaming Tools
 pacman -S --noconfirm steam steam-native-runtime lutris mangohud vulkan-tools
