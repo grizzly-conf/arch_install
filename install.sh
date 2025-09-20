@@ -10,7 +10,7 @@ set -euo pipefail
 
 ROOT_DISK="/dev/nvme0n1"
 HOME_DISK="/dev/nvme1n1"
-EFI_SIZE="1024MiB"
+EFI_SIZE="2GiB"
 USERNAME="seb"
 HOSTNAME="archhome"
 TIMEZONE="Europe/Berlin"
