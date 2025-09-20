@@ -64,7 +64,7 @@ pacman-key --populate archlinux
 pacman -Sy --noconfirm
 
 # Basis installieren
-pacstrap /mnt base linux linux-firmware vim efibootmgr base-devel man-db man-pages bash-completion which wget curl htop usbutils pciutils
+pacstrap /mnt base linux linux-firmware vim efibootmgr base-devel man-db man-pages bash-completion which wget curl htop usbutils pciutils git
 
 genfstab -U /mnt >> /mnt/etc/fstab
 
