@@ -64,7 +64,7 @@ pacman-key --populate archlinux
 pacman -Sy --noconfirm
 
 # Basis installieren
-pacstrap /mnt base linux linux-firmware vim efibootmgr sudo
+pacstrap /mnt base linux linux-firmware vim efibootmgr base-devel man-db man-pages bash-completion which wget curl htop usbutils pciutils
 
 genfstab -U /mnt >> /mnt/etc/fstab
 
@@ -112,6 +112,19 @@ echo "$USERNAME:archlinux" | chpasswd
 # Sudo-Rechte für wheel
 echo "%wheel ALL=(ALL) ALL" > /etc/sudoers.d/wheel
 chmod 440 /etc/sudoers.d/wheel
+
+# NetworkManager installieren & aktivieren
+pacman -S --noconfirm networkmanager
+systemctl enable NetworkManager
+
+
+# OpenSSH installieren & aktivieren
+pacman -S --noconfirm openssh
+systemctl enable sshd
+# Passwort-Login für SSH sicherstellen
+sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+sed -i 's/^PasswordAuthentication no/#PasswordAuthentication no/' /etc/ssh/sshd_config
+echo "AllowUsers $USERNAME" >> /etc/ssh/sshd_config
 
 # systemd-boot installieren
 bootctl --path=/boot install
