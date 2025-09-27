@@ -23,26 +23,21 @@ SWAP_SIZE="8G"            # Swapfile
 ##########################
 
 echo "!!! ⚠️ ACHTUNG: ALLE DATEN AUF $ROOT_DISK UND $HOME_DISK WERDEN GELÖSCHT !!!"
-read -p "Willst du fortfahren? (yes/no): " confirm
-if [ "$confirm" != "yes" ]; then
-    echo "Abgebrochen"
-    exit 1
-fi
 
 echo "⚠️ Partitionierung startet in 5 Sekunden..."
 sleep 5
 
 # ROOT Disk
-parted $ROOT_DISK --script mklabel gpt
-parted $ROOT_DISK --script mkpart ESP fat32 1MiB $EFI_SIZE
-parted $ROOT_DISK --script set 1 esp on
-parted $ROOT_DISK --script mkpart primary ext4 $EFI_SIZE 100%
+parted "$ROOT_DISK" --script mklabel gpt
+parted "$ROOT_DISK" --script mkpart ESP fat32 1MiB "$EFI_SIZE"
+parted "$ROOT_DISK" --script set 1 esp on
+parted "$ROOT_DISK" --script mkpart primary ext4 "$EFI_SIZE" 100%
 
 # HOME Disk
-parted $HOME_DISK --script mklabel gpt
-parted $HOME_DISK --script mkpart primary ext4 1MiB 100%
+parted "$HOME_DISK" --script mklabel gpt
+parted "$HOME_DISK" --script mkpart primary ext4 1MiB 100%
 
-# Filesystem
+# Filesystem erstellen
 mkfs.fat -F32 "${ROOT_DISK}p1"
 mkfs.ext4 -F "${ROOT_DISK}p2"
 mkfs.ext4 -F "${HOME_DISK}p1"
@@ -50,6 +45,7 @@ mkfs.ext4 -F "${HOME_DISK}p1"
 ##########################
 # 2️⃣ MOUNTEN
 ##########################
+
 mount "${ROOT_DISK}p2" /mnt
 mkdir -p /mnt/boot /mnt/home
 mount "${ROOT_DISK}p1" /mnt/boot
@@ -58,6 +54,7 @@ mount "${HOME_DISK}p1" /mnt/home
 ##########################
 # 3️⃣ BASIS-SYSTEM INSTALLIEREN
 ##########################
+
 # Keyring initialisieren in Live-Umgebung
 pacman-key --init
 pacman-key --populate archlinux
@@ -66,27 +63,25 @@ pacman -Sy --noconfirm
 # Basis installieren
 pacstrap /mnt base linux linux-firmware vim efibootmgr base-devel man-db man-pages bash-completion which wget curl htop usbutils pciutils git
 
+# fstab generieren
 genfstab -U /mnt >> /mnt/etc/fstab
 
 ##########################
 # 4️⃣ SYSTEM KONFIGURATION (CHROOT)
 ##########################
+
 arch-chroot /mnt /bin/bash <<EOF
 # Keyring initialisieren innerhalb chroot
 pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm
 
-# Zeitzone setzen
+# Zeitzone und Uhr
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
-
-# Hardware-Uhr auf UTC setzen
 hwclock --systohc --utc
-
-# NTP vorbereiten (wirkt erst nach Reboot mit systemd-timesyncd)
 timedatectl set-ntp true || true
 
-# Locale konfigurieren
+# Locale
 echo "LANG=$LANG" > /etc/locale.conf
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
@@ -94,7 +89,7 @@ locale-gen
 # Keymap
 echo "KEYMAP=$KEYMAP" > /etc/vconsole.conf
 
-# Hostname
+# Hostname & hosts
 echo "$HOSTNAME" > /etc/hostname
 cat <<HOSTS > /etc/hosts
 127.0.0.1    localhost
@@ -103,11 +98,11 @@ cat <<HOSTS > /etc/hosts
 HOSTS
 
 # Root-Passwort
-echo "root:archlinux" | chpasswd
+echo "root:s3b" | chpasswd
 
 # Standarduser mit wheel-Gruppe
 useradd -m -G wheel -s /bin/bash $USERNAME
-echo "$USERNAME:archlinux" | chpasswd
+echo "s3b" | chpasswd
 
 # Sudo-Rechte für wheel
 echo "%wheel ALL=(ALL) ALL" > /etc/sudoers.d/wheel
@@ -117,11 +112,9 @@ chmod 440 /etc/sudoers.d/wheel
 pacman -S --noconfirm networkmanager
 systemctl enable NetworkManager
 
-
 # OpenSSH installieren & aktivieren
 pacman -S --noconfirm openssh
 systemctl enable sshd
-# Passwort-Login für SSH sicherstellen
 sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 sed -i 's/^PasswordAuthentication no/#PasswordAuthentication no/' /etc/ssh/sshd_config
 echo "AllowUsers $USERNAME" >> /etc/ssh/sshd_config
@@ -132,7 +125,7 @@ bootctl --path=/boot install
 # Initramfs erstellen
 mkinitcpio -P
 
-# Bootloader Einträge mit korrekter UUID
+# Bootloader Einträge
 UUID_ROOT=\$(blkid -s UUID -o value ${ROOT_DISK}p2)
 
 cat <<ARCH > /boot/loader/entries/arch.conf
@@ -149,16 +142,15 @@ initrd  /initramfs-linux-fallback.img
 options root=UUID=\$UUID_ROOT rw
 FALLBACK
 
-# EFI NVRAM Eintrag (falls bootctl nicht automatisch eingetragen hat)
+# EFI NVRAM Eintrag sichern
 efibootmgr -c -d $ROOT_DISK -p 1 -L "Arch Linux" -l '\EFI\systemd\systemd-bootx64.efi' || true
-
 EOF
 
 ##########################
 # 5️⃣ TREIBER & GAMING
 ##########################
-arch-chroot /mnt /bin/bash <<EOF
 
+arch-chroot /mnt /bin/bash <<EOF
 # Multilib aktivieren
 sed -i '/#\\[multilib\\]/,/#Include/ s/^#//' /etc/pacman.conf
 pacman -Sy --noconfirm
@@ -173,27 +165,22 @@ echo "options nvidia_drm modeset=1" > /etc/modprobe.d/nvidia.conf
 sed -i 's/^MODULES=.*/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
 sed -i 's/^HOOKS=.*/HOOKS=(base udev autodetect modconf kms keyboard keymap consolefont block filesystems fsck)/' /etc/mkinitcpio.conf
 
-# Initramfs rebuild
 mkinitcpio -P
 
 # Gaming Tools
 pacman -S --noconfirm steam steam-native-runtime lutris mangohud vulkan-tools
-
 EOF
 
 ##########################
 # 6️⃣ SWAPFILE ERSTELLEN
 ##########################
-arch-chroot /mnt /bin/bash <<EOF
 
+arch-chroot /mnt /bin/bash <<EOF
 fallocate -l $SWAP_SIZE /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
-
-# Persistente Eintragung in fstab
 echo "/swapfile none swap defaults 0 0" | tee -a /etc/fstab
-
 EOF
 
 echo "🎉 Installation abgeschlossen! Bitte neu booten."
