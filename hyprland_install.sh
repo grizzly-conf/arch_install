@@ -1,90 +1,95 @@
 #!/bin/bash
-set -e
+# Hyprland & Userland Install Script
+# Fortführung nach Arch Basisinstallation (arch-chroot /mnt)
 
-echo "[*] Updating system..."
-pacman -Syu --noconfirm
 
-echo "[*] Installing core environment..."
+# Check if root
+if [ "$EUID" -eq 0 ]; then
+  echo "❌ Bitte nicht als root starten. Melde dich als dein User an und führe das Script dort aus."
+  exit 1
+fi
+
+set -euo pipefail
+
+USER_NAME=$(logname)
+
+echo "[*] Updating package databases..."
+pacman -Sy --noconfirm
+
+###############################
+# 1️⃣ Yay installieren (AUR Helper)
+###############################
+echo "[*] Installing yay (AUR helper)..."
+pacman -S --noconfirm --needed git base-devel
+sudo -u $USER_NAME git clone https://aur.archlinux.org/yay.git /tmp/yay
+(cd /tmp/yay && sudo -u $USER_NAME makepkg -si --noconfirm)
+rm -rf /tmp/yay
+
+###############################
+# 2️⃣ Basis-Werkzeuge
+###############################
+echo "[*] Installing base tools..."
 pacman -S --noconfirm \
-    base-devel \
-    git \
+    zsh \
+    alacritty \
+    ripgrep \
+    fd \
+    bat \
+    exa \
+    vim \
     wget \
     curl \
     unzip \
     zip \
+    gzip \
+    tar \
+    openssh \
+    htop \
+    btop \
     man-db \
-    man-pages \
-    sudo \
-    vim
+    man-pages
 
+chsh -s /bin/zsh $USER_NAME
+
+###############################
+# 3️⃣ Fonts
+###############################
 echo "[*] Installing fonts..."
 pacman -S --noconfirm \
     noto-fonts \
     noto-fonts-cjk \
     noto-fonts-emoji \
-    ttf-dejavu \
-    ttf-jetbrains-mono-nerd \
-    ttf-fira-code-nerd
+    ttf-nerd-fonts-symbols
 
-echo "[*] Installing terminal + shell utilities..."
+###############################
+# 4️⃣ Hyprland & Ecosystem
+###############################
+echo "[*] Installing Hyprland + ecosystem..."
 pacman -S --noconfirm \
-    alacritty \
-    zsh \
-    zsh-completions \
-    tmux \
-    fzf \
-    ripgrep \
-    fd \
-    bat \
-    exa \
-    neovim
-
-chsh -s /bin/zsh
-
-echo "[*] Installing file manager..."
-# Yazi wird über AUR installiert
-pacman -S --noconfirm \
-    ueberzugpp \
-    imagemagick
-
-# AUR: yazi
-if ! command -v yay &>/dev/null; then
-  echo "[*] Installing yay (AUR helper)..."
-  cd /opt
-  git clone https://aur.archlinux.org/yay-bin.git
-  chown -R $(logname):$(logname) yay-bin
-  cd yay-bin
-  sudo -u $(logname) makepkg -si --noconfirm
-  cd ..
-fi
-
-sudo -u $(logname) yay -S --noconfirm yazi
-
-echo "[*] Installing Wayland + Hyprland stack..."
-pacman -S --noconfirm \
-    wayland \
-    wlroots \
-    xdg-desktop-portal \
-    xdg-desktop-portal-gtk \
-    xdg-desktop-portal-hyprland \
     hyprland \
-    hyprpaper \
-    hyprlock \
-    hypridle
-
-echo "[*] Installing notification daemon..."
-pacman -S --noconfirm \
+    xdg-desktop-portal-hyprland \
+    qt5-wayland \
+    qt6-wayland \
+    waybar \
+    rofi \
+    rofi-emoji \
+    dunst \
+    wl-clipboard \
+    cliphist \
+    grim \
+    slurp \
+    hyprpicker \
     mako \
-    libnotify
+    hypridle \
+    hyprlock
 
-echo "[*] Installing status bar..."
-pacman -S --noconfirm \
-    waybar
+# hyprland-community tools (AUR)
+sudo -u $USER_NAME yay -S --noconfirm hyprls
 
-# Eww (optional, AUR)
-sudo -u $(logname) yay -S --noconfirm eww
-
-echo "[*] Installing audio stack..."
+###############################
+# 5️⃣ Audio (PipeWire + Tools)
+###############################
+echo "[*] Installing PipeWire..."
 pacman -S --noconfirm \
     pipewire \
     pipewire-alsa \
@@ -94,52 +99,64 @@ pacman -S --noconfirm \
     pavucontrol
 
 # wiremix (AUR)
-sudo -u $(logname) yay -S --noconfirm wiremix
+sudo -u $USER_NAME yay -S --noconfirm wiremix
 
-echo "[*] Installing polkit agent..."
+###############################
+# 6️⃣ Network & Wireless
+###############################
+echo "[*] Installing network utilities..."
+pacman -S --noconfirm \
+    networkmanager \
+    nm-connection-editor \
+    iwd \
+    bluez \
+    bluez-utils
+
+systemctl enable NetworkManager
+systemctl enable bluetooth.service
+
+# impala (AUR - minimal GUI für NetworkManager)
+sudo -u $USER_NAME yay -S --noconfirm impala
+
+###############################
+# 7️⃣ Authentication Agent
+###############################
+echo "[*] Installing polkit..."
 pacman -S --noconfirm \
     polkit \
     lxqt-policykit
 
-# (Hyprpolkitagent wenn du unbedingt Hypr-eigen willst, sonst lxqt-policykit ist stabiler)
-# sudo -u $(logname) yay -S --noconfirm hyprpolkitagent
-
-echo "[*] Installing blue light filter..."
+###############################
+# 8️⃣ Extras: Screenshots, Sharing, Wallpaper
+###############################
+echo "[*] Installing screenshot/recording tools..."
 pacman -S --noconfirm \
-    wlsunset
+    obs-studio
 
-# Hyprsunset (AUR optional)
-# sudo -u $(logname) yay -S --noconfirm hyprsunset
+# Wallpapers (AUR)
+sudo -u $USER_NAME yay -S --noconfirm wallrizz
 
-echo "[*] Installing clipboard manager..."
+###############################
+# 9️⃣ Virtualization / Container
+###############################
+echo "[*] Installing virtualization tools..."
 pacman -S --noconfirm \
-    wl-clipboard \
-    cliphist
+    docker \
+    docker-compose
 
-echo "[*] Installing launcher..."
-pacman -S --noconfirm \
-    rofi \
-    rofi-emoji
+sudo -u $USER_NAME yay -S --noconfirm lazydocker
 
-# Optional: wofi
-# pacman -S --noconfirm wofi
+systemctl enable docker
+usermod -aG docker $USER_NAME
 
+###############################
+# 🔟 Dotfiles Manager
+###############################
 echo "[*] Installing dotfiles manager..."
-sudo -u $(logname) yay -S --noconfirm chezmoi
+sudo -u $USER_NAME yay -S --noconfirm chezmoi
 
-echo "[*] Installing wireless utilities..."
-pacman -S --noconfirm \
-    networkmanager \
-    network-manager-applet \
-    nm-connection-editor \
-    iwd
-
-# Optional: Overskride (AUR, experimentell)
-# sudo -u $(logname) yay -S --noconfirm overskride
-
-echo "[*] Enabling services..."
-systemctl enable NetworkManager
-systemctl enable bluetooth.service || true
-systemctl enable systemd-timesyncd
-
-echo "[*] Done!"
+###############################
+# ✅ Done
+###############################
+echo "🎉 Hyprland environment installation complete!"
+echo "Bitte neu starten oder mit systemctl --user enable/start für Services weitermachen."
