@@ -1,25 +1,22 @@
 #!/bin/bash
-# Hyprland & Userland Install Script
-# Fortführung nach Arch Basisinstallation (arch-chroot /mnt)
+# Hyprland & Userland Install Script (Root Execution)
+set -euo pipefail
 
+USER_NAME="seb"
 
-# Check if root
-if [ "$EUID" -eq 0 ]; then
-  echo "❌ Bitte nicht als root starten. Melde dich als dein User an und führe das Script dort aus."
+# --- Root Check ---
+if [ "$EUID" -ne 0 ]; then
+  echo "❌ Bitte direkt als root ausführen (su - oder root login)."
   exit 1
 fi
 
-set -euo pipefail
-
-USER_NAME=$(logname)
-
-echo "[*] Updating package databases..."
+echo "[*] Updating system..."
 pacman -Sy --noconfirm
 
 ###############################
 # 1️⃣ Yay installieren (AUR Helper)
 ###############################
-echo "[*] Installing yay (AUR helper)..."
+echo "[*] Installing yay..."
 pacman -S --noconfirm --needed git base-devel
 sudo -u $USER_NAME git clone https://aur.archlinux.org/yay.git /tmp/yay
 (cd /tmp/yay && sudo -u $USER_NAME makepkg -si --noconfirm)
@@ -28,7 +25,7 @@ rm -rf /tmp/yay
 ###############################
 # 2️⃣ Basis-Werkzeuge
 ###############################
-echo "[*] Installing base tools..."
+echo "[*] Installing core utilities..."
 pacman -S --noconfirm \
     zsh \
     alacritty \
@@ -47,7 +44,8 @@ pacman -S --noconfirm \
     htop \
     btop \
     man-db \
-    man-pages
+    man-pages \
+    sudo
 
 chsh -s /bin/zsh $USER_NAME
 
@@ -78,8 +76,8 @@ pacman -S --noconfirm \
     cliphist \
     grim \
     slurp \
-    hyprpicker \
     mako \
+    hyprpicker \
     hypridle \
     hyprlock
 
@@ -89,14 +87,14 @@ sudo -u $USER_NAME yay -S --noconfirm hyprls
 ###############################
 # 5️⃣ Audio (PipeWire + Tools)
 ###############################
-echo "[*] Installing PipeWire..."
+echo "[*] Installing PipeWire audio stack..."
 pacman -S --noconfirm \
     pipewire \
     pipewire-alsa \
     pipewire-pulse \
-    pipewire-jack \
     wireplumber \
-    pavucontrol
+    pavucontrol \
+    jack2
 
 # wiremix (AUR)
 sudo -u $USER_NAME yay -S --noconfirm wiremix
@@ -115,7 +113,7 @@ pacman -S --noconfirm \
 systemctl enable NetworkManager
 systemctl enable bluetooth.service
 
-# impala (AUR - minimal GUI für NetworkManager)
+# impala (AUR)
 sudo -u $USER_NAME yay -S --noconfirm impala
 
 ###############################
@@ -150,7 +148,15 @@ systemctl enable docker
 usermod -aG docker $USER_NAME
 
 ###############################
-# 🔟 Dotfiles Manager
+# 🔟 Additional Software (AUR)
+###############################
+sudo -u $USER_NAME yay -S --noconfirm \
+    google-chrome \
+    visual-studio-code-bin \
+    1password
+
+###############################
+# 1️⃣1️⃣ Dotfiles Manager
 ###############################
 echo "[*] Installing dotfiles manager..."
 sudo -u $USER_NAME yay -S --noconfirm chezmoi
