@@ -81,7 +81,7 @@ pacman -S --noconfirm \
     hypridle \
     hyprlock \
     greetd \
-    tuigreet
+    greetd-tuigreet
 
 
 # hyprland-community tools (AUR)
