@@ -79,7 +79,10 @@ pacman -S --noconfirm \
     mako \
     hyprpicker \
     hypridle \
-    hyprlock
+    hyprlock \
+    greetd \
+    tuigreet
+
 
 # hyprland-community tools (AUR)
 sudo -u $USER_NAME yay -S --noconfirm hyprls
