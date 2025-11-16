@@ -36,6 +36,8 @@ pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm
 
+reflector --country Germany --protocol https --sort rate --save /etc/pacman.d/mirrorlist
+
 pacstrap /mnt base linux linux-firmware amd-ucode vim efibootmgr base-devel man-db man-pages bash-completion which wget curl htop usbutils pciutils git
 
 genfstab -U /mnt >> /mnt/etc/fstab
