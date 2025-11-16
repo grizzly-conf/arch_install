@@ -3,9 +3,9 @@ set -euo pipefail
 
 # Configuration
 ROOT_DISK="/dev/nvme0n1"
-EFI_SIZE="512MiB"
+EFI_SIZE="1GiB"
 USERNAME="seb"
-HOSTNAME="arch-anylaptop"
+HOSTNAME="anyLAPTOP-62"
 TIMEZONE="Europe/Berlin"
 LANG="en_US.UTF-8"
 KEYMAP="de-latin1"
