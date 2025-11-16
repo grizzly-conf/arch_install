@@ -70,7 +70,7 @@ HOSTS
 # passwords (replace if needed)
 echo "root:s3b" | chpasswd
 useradd -m -G wheel -s /bin/bash $USERNAME
-echo "s3b" | chpasswd
+echo "seb:s3b" | chpasswd
 
 # sudo wheel
 echo "%wheel ALL=(ALL) ALL" > /etc/sudoers.d/wheel
