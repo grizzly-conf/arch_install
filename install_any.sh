@@ -1,95 +1,61 @@
-#!/bin/bash
-# Arch Linux Full Installation Script
-# !!! ACHTUNG: Dieses Skript löscht alle Daten auf den angegebenen Partitionen !!!
-
+#!/usr/bin/env bash
 set -euo pipefail
 
-##########################
-# ⚠️ CONFIGURATION
-##########################
-
+# Configuration
 ROOT_DISK="/dev/nvme0n1"
-HOME_DISK="/dev/nvme1n1"
-EFI_SIZE="2GiB"
+EFI_SIZE="512MiB"
 USERNAME="seb"
-HOSTNAME="archhome"
+HOSTNAME="arch-anylaptop"
 TIMEZONE="Europe/Berlin"
-LANG="en_US.UTF-8"        # Systemsprache
-KEYMAP="de-latin1"        # Tastaturlayout
-SWAP_SIZE="8G"            # Swapfile
+LANG="en_US.UTF-8"
+KEYMAP="de-latin1"
+SWAP_SIZE="8G"
 
-##########################
-# 1️⃣ PARTITIONIERUNG
-##########################
-
-echo "!!! ⚠️ ACHTUNG: ALLE DATEN AUF $ROOT_DISK UND $HOME_DISK WERDEN GELÖSCHT !!!"
-
-echo "⚠️ Partitionierung startet in 5 Sekunden..."
-sleep 5
-
-# ROOT Disk
+# Partitioning (single NVMe: EFI / ROOT / HOME)
 parted "$ROOT_DISK" --script mklabel gpt
 parted "$ROOT_DISK" --script mkpart ESP fat32 1MiB "$EFI_SIZE"
 parted "$ROOT_DISK" --script set 1 esp on
-parted "$ROOT_DISK" --script mkpart primary ext4 "$EFI_SIZE" 100%
+parted "$ROOT_DISK" --script mkpart primary ext4 "$EFI_SIZE" 40%
+parted "$ROOT_DISK" --script mkpart primary ext4 40% 100%
 
-# HOME Disk
-parted "$HOME_DISK" --script mklabel gpt
-parted "$HOME_DISK" --script mkpart primary ext4 1MiB 100%
-
-# Filesystem erstellen
+# Filesystems
 mkfs.fat -F32 "${ROOT_DISK}p1"
 mkfs.ext4 -F "${ROOT_DISK}p2"
-mkfs.ext4 -F "${HOME_DISK}p1"
+mkfs.ext4 -F "${ROOT_DISK}p3"
 
-##########################
-# 2️⃣ MOUNTEN
-##########################
-
+# Mount
 mount "${ROOT_DISK}p2" /mnt
 mkdir -p /mnt/boot /mnt/home
 mount "${ROOT_DISK}p1" /mnt/boot
-mount "${HOME_DISK}p1" /mnt/home
+mount "${ROOT_DISK}p3" /mnt/home
 
-##########################
-# 3️⃣ BASIS-SYSTEM INSTALLIEREN
-##########################
-
-# Keyring initialisieren in Live-Umgebung
+# Keyring & basic packages in live environment
 pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm
 
-# Basis installieren
-pacstrap /mnt base linux linux-firmware vim efibootmgr base-devel man-db man-pages bash-completion which wget curl htop usbutils pciutils git
+pacstrap /mnt base linux linux-firmware amd-ucode vim efibootmgr base-devel man-db man-pages bash-completion which wget curl htop usbutils pciutils git
 
-# fstab generieren
 genfstab -U /mnt >> /mnt/etc/fstab
 
-##########################
-# 4️⃣ SYSTEM KONFIGURATION (CHROOT)
-##########################
-
+# Chroot configuration
 arch-chroot /mnt /bin/bash <<EOF
-# Keyring initialisieren innerhalb chroot
-pacman-key --init
-pacman-key --populate archlinux
-pacman -Sy --noconfirm
+set -euo pipefail
 
-# Zeitzone und Uhr
+# timezone & clock
 ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
 hwclock --systohc --utc
 timedatectl set-ntp true || true
 
-# Locale
+# locale
 echo "LANG=$LANG" > /etc/locale.conf
 sed -i 's/^#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
 locale-gen
 
-# Keymap
+# keymap
 echo "KEYMAP=$KEYMAP" > /etc/vconsole.conf
 
-# Hostname & hosts
+# hostname & hosts
 echo "$HOSTNAME" > /etc/hostname
 cat <<HOSTS > /etc/hosts
 127.0.0.1    localhost
@@ -97,40 +63,32 @@ cat <<HOSTS > /etc/hosts
 127.0.1.1    $HOSTNAME.localdomain $HOSTNAME
 HOSTS
 
-# Root-Passwort
+# passwords (replace if needed)
 echo "root:s3b" | chpasswd
-
-# Standarduser mit wheel-Gruppe
 useradd -m -G wheel -s /bin/bash $USERNAME
 echo "s3b" | chpasswd
 
-# Sudo-Rechte für wheel
+# sudo wheel
 echo "%wheel ALL=(ALL) ALL" > /etc/sudoers.d/wheel
 chmod 440 /etc/sudoers.d/wheel
 
-# NetworkManager installieren & aktivieren
-pacman -S --noconfirm networkmanager
+# network & ssh
+pacman -S --noconfirm networkmanager openssh
 systemctl enable NetworkManager
-
-# OpenSSH installieren & aktivieren
-pacman -S --noconfirm openssh
 systemctl enable sshd
-sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-sed -i 's/^PasswordAuthentication no/#PasswordAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/^#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config || true
+sed -i 's/^PasswordAuthentication no/#PasswordAuthentication no/' /etc/ssh/sshd_config || true
 echo "AllowUsers $USERNAME" >> /etc/ssh/sshd_config
 
-# systemd-boot installieren
+# bootloader: systemd-boot with amd microcode
 bootctl --path=/boot install
 
-# Initramfs erstellen
-mkinitcpio -P
-
-# Bootloader Einträge
 UUID_ROOT=\$(blkid -s UUID -o value ${ROOT_DISK}p2)
 
 cat <<ARCH > /boot/loader/entries/arch.conf
 title   Arch Linux
 linux   /vmlinuz-linux
+initrd  /amd-ucode.img
 initrd  /initramfs-linux.img
 options root=UUID=\$UUID_ROOT rw
 ARCH
@@ -138,43 +96,42 @@ ARCH
 cat <<FALLBACK > /boot/loader/entries/arch-fallback.conf
 title   Arch Linux Fallback
 linux   /vmlinuz-linux
+initrd  /amd-ucode.img
 initrd  /initramfs-linux-fallback.img
 options root=UUID=\$UUID_ROOT rw
 FALLBACK
 
-# EFI NVRAM Eintrag sichern
 efibootmgr -c -d $ROOT_DISK -p 1 -L "Arch Linux" -l '\EFI\systemd\systemd-bootx64.efi' || true
-EOF
 
-##########################
-# 5️⃣ TREIBER & GAMING
-##########################
-
-arch-chroot /mnt /bin/bash <<EOF
-# Multilib aktivieren
-sed -i '/#\\[multilib\\]/,/#Include/ s/^#//' /etc/pacman.conf
-pacman -Sy --noconfirm
-
-# NVIDIA & Vulkan
-pacman -S --noconfirm linux-headers nvidia-dkms nvidia-utils lib32-nvidia-utils vulkan-icd-loader lib32-vulkan-icd-loader
-
-# NVIDIA DRM Modeset aktivieren
-echo "options nvidia_drm modeset=1" > /etc/modprobe.d/nvidia.conf
-
-# mkinitcpio.conf anpassen
-sed -i 's/^MODULES=.*/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
-sed -i 's/^HOOKS=.*/HOOKS=(base udev autodetect modconf kms keyboard keymap consolefont block filesystems fsck)/' /etc/mkinitcpio.conf
-
+# mkinitcpio (generate with amd microcode)
 mkinitcpio -P
 
-# Gaming Tools
-pacman -S --noconfirm steam steam-native-runtime lutris mangohud vulkan-tools
 EOF
 
-##########################
-# 6️⃣ SWAPFILE ERSTELLEN
-##########################
+# Graphics/Multimedia & laptop-specific packages (AMD integrated GPU)
+arch-chroot /mnt /bin/bash <<EOF
+set -euo pipefail
 
+# enable multilib if needed
+sed -i '/#\\[multilib\\]/,/#Include/ s/^#//' /etc/pacman.conf || true
+pacman -Sy --noconfirm
+
+# GPU, Vulkan, audio, and laptop firmware
+pacman -S --noconfirm mesa xf86-video-amdgpu vulkan-radeon lib32-vulkan-radeon libdrm mesa-vdpau sof-firmware linux-headers
+
+# gaming stack (optional in original script; adapted for AMD)
+pacman -S --noconfirm steam lutris mangohud vulkan-tools
+
+# power and ACPI helpers
+pacman -S --noconfirm tlp acpid
+systemctl enable tlp
+systemctl enable acpid
+
+# regenerate initramfs to include AMD microcode already handled; ensure amd-ucode present
+mkinitcpio -P
+EOF
+
+# swapfile
 arch-chroot /mnt /bin/bash <<EOF
 fallocate -l $SWAP_SIZE /swapfile
 chmod 600 /swapfile
@@ -183,4 +140,4 @@ swapon /swapfile
 echo "/swapfile none swap defaults 0 0" | tee -a /etc/fstab
 EOF
 
-echo "🎉 Installation abgeschlossen! Bitte neu booten."
+echo "Installation script completed."
