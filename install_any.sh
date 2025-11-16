@@ -11,7 +11,7 @@ KEYMAP="de-latin1"
 SWAP_SIZE="8G"
 
 # allow override: ./install.sh /dev/sda
-ROOT_DISK="\${1:-/dev/nvme0n1}"
+ROOT_DISK="/dev/nvme0n1"
 
 # Partitioning (single NVMe: EFI / ROOT / HOME)
 parted "$ROOT_DISK" --script mklabel gpt
