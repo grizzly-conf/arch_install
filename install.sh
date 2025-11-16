@@ -98,11 +98,11 @@ cat <<HOSTS > /etc/hosts
 HOSTS
 
 # Root-Passwort
-echo "root:s3b" | chpasswd
+echo "root:s3bR00T" | chpasswd
 
 # Standarduser mit wheel-Gruppe
 useradd -m -G wheel -s /bin/bash $USERNAME
-echo "s3b" | chpasswd
+echo "seb:s3b" | chpasswd
 
 # Sudo-Rechte für wheel
 echo "%wheel ALL=(ALL) ALL" > /etc/sudoers.d/wheel
